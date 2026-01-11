@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES='0' python RQ-VAE/main.py \
+  --device cuda:0 \
+  --data_path data/elec/handled/itm_emb_np_all.pkl \
+  --ckpt_dir data/elec/handled/sid \
+  --e_dim 128 \
+  --num_emb_list 32 256 256 256 256\
+  --layers 512 128\
+  --lr 2e-4 \
+  --batch_size 128 \
+  --epochs 5000 \
+  --maxe 200 \
+  --loss_type mmd \
+  --recon 1 \
