@@ -8,8 +8,6 @@ DA-HSR learns transferable yet domain-sensitive item representations for cross-d
   <img src="assets/framework.png" width="100%" alt="DA-HSR framework">
 </p>
 
-<p align="center"><em>Figure 1. Overall architecture of DA-HSR.</em></p>
-
 ## Requirements
 
 ```bash
@@ -81,8 +79,6 @@ DA-HSR is compared with single-domain sequential models, CDSR methods, and LLM-e
 <p align="center">
   <img src="assets/results.png" width="100%" alt="DA-HSR experimental results">
 </p>
-
-<p align="center"><em>Table 1. Performance comparison on Amazon Clothing-Sport, Electronics-Phone, and Food-Kitchen.</em></p>
 
 ## Repository Structure
 
