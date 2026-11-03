@@ -3,7 +3,7 @@ import pickle
 import torch
 from tqdm import tqdm
 from trainers.sequence_trainer import SeqTrainer
-from models.LLMCDSR import LLM4CDSR
+from models.dahsr import DAHSR
 from utils.utils import record_csv, metric_report, metric_domain_report
 
 
@@ -19,10 +19,10 @@ class CDSRTrainer(SeqTrainer):
 
         self.item_num_dict = self.generator.get_item_num_dict()
 
-        if self.args.model_name == "llm4cdsr":
-            self.model = LLM4CDSR(self.user_num, self.item_num_dict, self.device, self.args)
+        if self.args.model_name == "dahsr":
+            self.model = DAHSR(self.user_num, self.item_num_dict, self.device, self.args)
         else:
-            raise ValueError
+            raise ValueError("Unsupported model: {}".format(self.args.model_name))
         
         self.model.to(self.device)
 

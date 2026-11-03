@@ -37,6 +37,10 @@ class SASRecBackbone(nn.Module):
     def forward(self, seqs, log_seqs):
 
         timeline_mask = (log_seqs == 0)
+        fully_padded = timeline_mask.all(dim=1)
+        if fully_padded.any():
+            timeline_mask = timeline_mask.clone()
+            timeline_mask[fully_padded, 0] = False
         seqs *= ~timeline_mask.unsqueeze(-1) 
 
         tl = seqs.shape[1] 
@@ -45,8 +49,11 @@ class SASRecBackbone(nn.Module):
         for i in range(len(self.attention_layers)):
             seqs = torch.transpose(seqs, 0, 1)
             Q = self.attention_layernorms[i](seqs)
-            mha_outputs, _ = self.attention_layers[i](Q, seqs, seqs,)
-                                                    #   attn_mask=attention_mask)
+            mha_outputs, _ = self.attention_layers[i](
+                Q, seqs, seqs,
+                attn_mask=attention_mask,
+                key_padding_mask=timeline_mask,
+            )
             seqs = Q + mha_outputs
             seqs = torch.transpose(seqs, 0, 1)
 

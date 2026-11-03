@@ -1,24 +1,25 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers import sinkhorn_algorithm
 
 
-class VectorQuantizer(nn.Module):
+class DomainAdaptiveVectorQuantizer(nn.Module):
+    """Shared codebook with a low-rank domain-specific residual (Eq. 3-5)."""
 
-    def __init__(self, n_e, e_dim, mu = 1,
-                 kmeans_init = False, kmeans_iters = 10,
-                 sk_epsilon=0.01, sk_iters=100):
+    def __init__(self, n_e, e_dim, rank=16, n_domains=2, kmeans_init=False, kmeans_iters=10):
         super().__init__()
         self.n_e = n_e
         self.e_dim = e_dim
-        self.mu = mu
+        self.rank = rank
+        self.n_domains = n_domains
         self.kmeans_init = kmeans_init
         self.kmeans_iters = kmeans_iters
-        self.sk_epsilon = sk_epsilon
-        self.sk_iters = sk_iters
 
         self.embedding = nn.Embedding(self.n_e, self.e_dim)
+        self.A = nn.Parameter(torch.empty(self.n_e, rank))
+        self.B = nn.Parameter(torch.empty(rank, self.e_dim))
+        self.g = nn.Parameter(torch.empty(n_domains, rank))
+
         if not kmeans_init:
             self.initted = True
             self.embedding.weight.data.uniform_(-1.0 / self.n_e, 1.0 / self.n_e)
@@ -26,129 +27,94 @@ class VectorQuantizer(nn.Module):
             self.initted = False
             self.embedding.weight.data.zero_()
 
+        nn.init.xavier_normal_(self.A)
+        nn.init.xavier_normal_(self.B)
+        nn.init.xavier_normal_(self.g)
+
     def get_codebook(self):
         return self.embedding.weight
 
-    def get_codebook_entry(self, indices, shape=None):
-        # get quantized latent vectors
-        z_q = self.embedding(indices)
-        if shape is not None:
-            z_q = z_q.view(shape)
+    def get_adapted_codebook(self, domain_id):
+        scale = self.g[domain_id]
+        delta = (self.A * scale.unsqueeze(0)) @ self.B
+        return self.embedding.weight + delta
 
-        return z_q
+    def adaptation_reg(self):
+        loss = self.A.new_zeros(())
+        for domain_id in range(self.n_domains):
+            delta = (self.A * self.g[domain_id].unsqueeze(0)) @ self.B
+            loss = loss + delta.pow(2).sum()
+        return loss
 
     def init_emb(self, data):
-        centers, _ = self.constrained_km(data,self.n_e)
-        self.embedding.weight.data.copy_(centers)
+        try:
+            from k_means_constrained import KMeansConstrained
+
+            x = data.detach().cpu().numpy()
+            n_clusters = self.n_e
+            size_min = min(max(len(data) // (n_clusters * 2), 1), 50)
+            size_max = int(len(data) / n_clusters) + 1
+            clf = KMeansConstrained(
+                n_clusters=n_clusters,
+                size_min=size_min,
+                size_max=size_max,
+                max_iter=self.kmeans_iters,
+                n_init=10,
+                n_jobs=10,
+                verbose=False,
+            )
+            clf.fit(x)
+            centers = torch.from_numpy(clf.cluster_centers_).to(self.embedding.weight.device)
+        except Exception:
+            from sklearn.cluster import KMeans
+
+            x = data.detach().cpu().numpy()
+            clf = KMeans(n_clusters=self.n_e, n_init=10, max_iter=self.kmeans_iters)
+            clf.fit(x)
+            centers = torch.from_numpy(clf.cluster_centers_).to(self.embedding.weight.device)
+        self.embedding.weight.data.copy_(centers.to(self.embedding.weight.dtype))
         self.initted = True
-    
-    def constrained_km(self, data, n_clusters=10):
-        from k_means_constrained import KMeansConstrained 
-        x = data.cpu().detach().numpy()
 
-        size_min = min(len(data) // (n_clusters * 2), 50) # 50 for the very first time, 10 the latter
-        size_max = int(len(data) / n_clusters)  + 1
-
-        clf = KMeansConstrained(n_clusters=n_clusters, size_min=size_min, size_max=size_max, max_iter=10, n_init=10,
-                                n_jobs=10, verbose=False) # 'size_min * 4' for the very first time, 'n_clusters * 4' for the latter
-        clf.fit(x)
-        t_centers = torch.from_numpy(clf.cluster_centers_)
-        t_labels = torch.from_numpy(clf.labels_).tolist()
-        value_counts = {}
-        return t_centers, t_labels
-                    
-    @staticmethod
-    def center_distance_for_constraint(distances):
-        # distances: B, K
-        max_distance = distances.max()
-        min_distance = distances.min()
-
-        middle = (max_distance + min_distance) / 2
-        amplitude = max_distance - middle + 1e-5
-        assert amplitude > 0
-        centered_distances = (distances - middle) / amplitude
-        return centered_distances
-    
-    def vq_init(self, x, use_sk=True):
-        latent = x.view(-1, self.e_dim)
-
+    def vq_init(self, x):
+        latent = x.reshape(-1, self.e_dim)
         if not self.initted:
             self.init_emb(latent)
+        codebook = self.embedding.weight
+        dist = (
+            latent.pow(2).sum(dim=1, keepdim=True)
+            + codebook.pow(2).sum(dim=1)
+            - 2 * latent @ codebook.t()
+        )
+        indices = torch.argmin(dist, dim=-1)
+        return codebook[indices].view_as(x)
 
-        _distance_flag = 'distance'    
-        if _distance_flag == 'distance':
-            d = torch.sum(latent**2, dim=1, keepdim=True) + \
-                torch.sum(self.embedding.weight**2, dim=1, keepdim=True).t()- \
-                2 * torch.matmul(latent, self.embedding.weight.t())
-        else:    
-        # Calculate Cosine Similarity 
-            d = latent@self.embedding.weight.t()
-
-        if not use_sk or self.sk_epsilon <= 0:
-            if _distance_flag == 'distance':
-                indices = torch.argmin(d, dim=-1)
-            else:    
-                indices = torch.argmax(d, dim=-1)
-        else:
-            d = self.center_distance_for_constraint(d)
-            d = d.double()
-            Q = sinkhorn_algorithm(d,self.sk_epsilon,self.sk_iters)
-            if torch.isnan(Q).any() or torch.isinf(Q).any():
-                print(f"Sinkhorn Algorithm returns nan/inf values.")
-            indices = torch.argmax(Q, dim=-1)
-
-        x_q = self.embedding(indices).view(x.shape)
-
-        return x_q
-    
-    def forward(self,  x, label, idx, use_sk=True):
-        # Flatten input
-        latent = x.view(-1, self.e_dim)
-
+    def forward(self, residual, domains):
+        latent = residual.reshape(-1, self.e_dim)
+        if latent.size(0) != domains.numel():
+            domains = domains.reshape(-1)
         if not self.initted and self.training:
             self.init_emb(latent)
 
-        # Calculate the L2 Norm between latent and Embedded weights
-        _distance_flag = 'distance'           
-        if _distance_flag == 'distance':
-            d = torch.sum(latent**2, dim=1, keepdim=True) + \
-                torch.sum(self.embedding.weight**2, dim=1, keepdim=True).t()- \
-                2 * torch.matmul(latent, self.embedding.weight.t())
-        else:    
-        # Calculate Cosine Similarity 
-            d = latent@self.embedding.weight.t()
-        if not use_sk or self.sk_epsilon <= 0:
-            if _distance_flag == 'distance':
-                if idx != -1:
-                    indices = torch.argmin(d, dim=-1)
-                else:
-                    temp = 1.0
-                    prob_dist = F.softmax(-d/temp, dim=1)  
-                    indices = torch.multinomial(prob_dist, 1).squeeze()
-            else:    
-                indices = torch.argmax(d, dim=-1)
-        else:
-            d = self.center_distance_for_constraint(d)
-            d = d.double()
-            Q = sinkhorn_algorithm(d,self.sk_epsilon,self.sk_iters)
-            if torch.isnan(Q).any() or torch.isinf(Q).any():
-                print(f"Sinkhorn Algorithm returns nan/inf values.")
-            indices = torch.argmax(Q, dim=-1)
+        quantized = torch.zeros_like(latent)
+        indices = torch.zeros(latent.size(0), dtype=torch.long, device=latent.device)
+        commit = latent.new_zeros(())
 
-        x_q = self.embedding(indices).view(x.shape)
+        for domain_id in domains.unique():
+            domain_id = int(domain_id.item())
+            mask = domains == domain_id
+            z = latent[mask]
+            codebook = self.get_adapted_codebook(domain_id)
+            dist = (
+                z.pow(2).sum(dim=1, keepdim=True)
+                + codebook.pow(2).sum(dim=1)
+                - 2 * z @ codebook.t()
+            )
+            idx = torch.argmin(dist, dim=-1)
+            code = codebook[idx]
+            quantized[mask] = code
+            indices[mask] = idx
+            commit = commit + F.mse_loss(z, code.detach(), reduction="sum")
 
-        # compute rq-vae loss
-        commitment_loss = F.mse_loss(x_q.detach(), x)
-        codebook_loss = F.mse_loss(x_q, x.detach())
-
-        loss = codebook_loss + self.mu * commitment_loss
-
-
-        # preserve gradients
-        x_q = x + (x_q - x).detach()
-
-        indices = indices.view(x.shape[:-1])
-
-        return x_q, loss, indices
-
-
+        commit = commit / max(latent.size(0), 1)
+        quantized = quantized.view_as(residual)
+        return quantized, indices.view(residual.shape[:-1]), commit

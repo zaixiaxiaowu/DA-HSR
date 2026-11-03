@@ -1,7 +1,6 @@
 *.pkl
 .vscode/
 *.gz
-*.txt
 *.csv
 *.json
 *.jsonline
@@ -14,6 +13,7 @@ checkpoint/
 *.out
 wandb/
 *.png
+!assets/*.png
 png/
 saved/
 figure/
@@ -26,4 +26,5 @@ json/
 figures/
 raw/
 resources/
-data/
+data/*/raw/
+data/*/handled/

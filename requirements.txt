@@ -1,0 +1,12 @@
+torch>=2.0.0
+numpy
+pandas
+scipy
+scikit-learn
+tqdm
+tensorboard
+sentence-transformers
+k-means-constrained
+setproctitle
+requests
+pillow

@@ -2,10 +2,10 @@
 set -e
 
 echo "=================================================="
-echo "Starting Data Processing for all datasets"
+echo "Starting data processing for all datasets"
 echo "=================================================="
 
-echo "Processing cloth (Clothing & Sports)..."
+echo "Processing cloth (Clothing & Sport)..."
 python data/handle.py \
     --dataset cloth \
     --domain_a "Clothing_Shoes_and_Jewelry" \
@@ -13,11 +13,9 @@ python data/handle.py \
     --start_time 1514736000 \
     --end_time 1577808000 \
     --user_core 5 \
-    --item_core 3
+    --item_core 5
 
-echo "--------------------------------------------------"
-
-echo "Processing Elec (Electronics & Cell Phones)..."
+echo "Processing elec (Electronics & Phone)..."
 python data/handle.py \
     --dataset elec \
     --domain_a "Electronics" \
@@ -25,21 +23,18 @@ python data/handle.py \
     --start_time 1500000000 \
     --end_time 1600000000 \
     --user_core 5 \
-    --item_core 3
+    --item_core 5
 
-echo "--------------------------------------------------"
-
-echo "Processing Food (Home & Grocery)..."
+echo "Processing food (Food & Kitchen)..."
 python data/handle.py \
     --dataset food \
-    --domain_a "Home_and_Kitchen" \
-    --domain_b "Grocery_and_Gourmet_Food" \
+    --domain_a "Grocery_and_Gourmet_Food" \
+    --domain_b "Home_and_Kitchen" \
     --start_time 1500000000 \
     --end_time 1600000000 \
     --user_core 5 \
-    --item_core 3
+    --item_core 5
 
 echo "=================================================="
-echo "All datasets processed successfully!"
-echo "Outputs are located in data/{dataset}/handled/"
+echo "All datasets processed successfully."
 echo "=================================================="

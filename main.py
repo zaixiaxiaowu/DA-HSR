@@ -9,7 +9,7 @@ from utils.logger import Logger
 from utils.argument import *
 
 import setproctitle
-setproctitle.setproctitle("LLM4CDSR")
+setproctitle.setproctitle("DA-HSR")
 
 
 parser = argparse.ArgumentParser()
@@ -40,15 +40,11 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    if args.model_name in ["llm4cdsr",]:
+    if args.model_name in ["dahsr"]:
         generator = CDSRRegSeq2SeqGeneratorUser(args, logger, device)
-    else:
-        raise ValueError
-
-    if args.model_name in ["llm4cdsr",]:
         trainer = CDSRTrainer(args, logger, writer, device, generator)
     else:
-        raise ValueError
+        raise ValueError("Unsupported model: {}".format(args.model_name))
 
     if args.do_test:
         trainer.test()

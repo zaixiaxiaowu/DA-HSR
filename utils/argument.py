@@ -2,8 +2,8 @@ def get_main_arguments(parser):
     """Required parameters"""
 
     parser.add_argument("--model_name", 
-                        default='sasrec_seq',
-                        choices=['llm4cdsr'],
+                        default='dahsr',
+                        choices=['dahsr'],
                         type=str, 
                         required=False,
                         help="model name")
@@ -93,11 +93,11 @@ def get_model_arguments(parser):
                         type=float,
                         help="the temperature for contrastive loss")
     parser.add_argument("--dropout_rate",
-                        default=0.5,
+                        default=0.2,
                         type=float,
                         help="the dropout rate")
     parser.add_argument("--max_len",
-                        default=200,
+                        default=50,
                         type=int,
                         help="the max length of input sequence")
     parser.add_argument("--mask_prob",
@@ -149,9 +149,45 @@ def get_model_arguments(parser):
                         action="store_true",
                         help="whether freeze the embedding layer, mainly for LLM embedding")
     parser.add_argument("--alpha",
+                        default=0.5,
+                        type=float,
+                        help="weight of CCIP loss")
+    parser.add_argument("--beta",
                         default=0.1,
                         type=float,
-                        help="the weight of auxiliary loss")
+                        help="weight of IIC loss")
+    parser.add_argument("--gamma",
+                        default=0.05,
+                        type=float,
+                        help="weight of hyperbolic HCL")
+    parser.add_argument("--tau1",
+                        default=0.1,
+                        type=float,
+                        help="temperature for CCIP")
+    parser.add_argument("--tau2",
+                        default=0.1,
+                        type=float,
+                        help="temperature for IIC")
+    parser.add_argument("--n_neg",
+                        default=20,
+                        type=int,
+                        help="number of negative samples for recommendation loss")
+    parser.add_argument("--lorentz_c",
+                        default=1.0,
+                        type=float,
+                        help="Lorentz curvature for HCL")
+    parser.add_argument("--cone_k",
+                        default=0.1,
+                        type=float,
+                        help="entailment cone constant for HCL")
+    parser.add_argument("--mask_ratio",
+                        default=0.2,
+                        type=float,
+                        help="item mask ratio for IIC views")
+    parser.add_argument("--crop_ratio",
+                        default=0.2,
+                        type=float,
+                        help="prefix crop ratio for IIC views")
     parser.add_argument("--llm_emb_file",
                         default="item_emb",
                         type=str,
@@ -161,9 +197,9 @@ def get_model_arguments(parser):
                         type=int,
                         help="the number of adapter expert")
     parser.add_argument("--sid_emb_file",
-                        default="reconstructed_emb",
+                        default="drq_layer_embs",
                         type=str,
-                        help="the file name of the sid embedding")
+                        help="file name of the DRQ layer-wise embeddings")
     # for LightGCN
     parser.add_argument("--layer_num",
                         default=2,
@@ -205,11 +241,11 @@ def get_train_arguments(parser):
     """Training parameters"""
     
     parser.add_argument("--train_batch_size",
-                        default=512,
+                        default=256,
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument("--lr",
-                        default=0.001,
+                        default=1e-4,
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--l2",

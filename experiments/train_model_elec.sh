@@ -1,37 +1,34 @@
-## LLM for CDSR
 gpu_id=0
 dataset="elec"
 seed_list=(42)
 inter_file="elec_phone"
 llm_emb_file="itm_emb_np"
-sid_emb_file="reconstructed_emb"
-model_name="llm4cdsr"
-alpha=0.1
+sid_emb_file="drq_layer_embs"
+model_name="dahsr"
+
 for seed in ${seed_list[@]}
 do
     python main.py --dataset ${dataset} \
                 --inter_file ${inter_file} \
                 --model_name ${model_name} \
                 --hidden_size 128 \
-                --train_batch_size 128 \
-                --max_len 200 \
+                --train_batch_size 256 \
+                --max_len 50 \
+                --lr 1e-4 \
+                --dropout_rate 0.2 \
                 --gpu_id ${gpu_id} \
                 --num_workers 4 \
                 --num_train_epochs 200 \
                 --seed ${seed} \
                 --check_path "" \
                 --patience 20 \
-                --ts_user 12 \
-                --ts_item 13 \
                 --log \
                 --domain "AB" \
-                --local_emb \
-                --global_emb \
-                --freeze_emb \
                 --llm_emb_file ${llm_emb_file} \
                 --sid_emb_file ${sid_emb_file} \
-                --alpha ${alpha}
+                --alpha 0.5 \
+                --beta 0.1 \
+                --gamma 0.05 \
+                --tau1 0.1 \
+                --tau2 0.1
 done
-
-
-
